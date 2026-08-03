@@ -137,7 +137,7 @@ export function useEditorShortcuts(): void {
       if (mod && (key === 'e' || key === 'E')) {
         e.preventDefault()
         if (!exportSupported()) {
-          s.setStatus('Export needs Chrome/Edge (WebCodecs)')
+          s.setStatus("This browser doesn't support WebCodecs export")
           return
         }
         if (s.exportBusy) return

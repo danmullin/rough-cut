@@ -25,7 +25,7 @@ export function MenuBar() {
   const doExport = async () => {
     const s = useDocStore.getState()
     if (!exportSupported()) {
-      s.setStatus('Export needs Chrome/Edge (WebCodecs)')
+      s.setStatus("This browser doesn't support WebCodecs export")
       return
     }
     if (s.exportBusy) return

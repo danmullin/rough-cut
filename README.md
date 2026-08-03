@@ -16,7 +16,9 @@ npm run dev
 
 Open the URL Vite prints (usually http://127.0.0.1:5173/).
 
-**Export** needs Chromium (Chrome / Edge) with WebCodecs `VideoEncoder`.
+**Playback/edit** works anywhere with `VideoDecoder` — Chrome, Edge, and Firefox 130+.
+**Export** needs WebCodecs `VideoEncoder`, also shipped in Chrome, Edge, and Firefox 130+.
+Native Save/Open file pickers are Chromium-only (File System Access API); Firefox falls back to download/upload, which works the same, just without overwriting the same file handle in place.
 
 ## Workflow
 

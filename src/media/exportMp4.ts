@@ -2,7 +2,7 @@ import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import type { ProjectDocument } from '../types'
 import { computeContentEnd } from '../store/document'
 import { composeFrame } from './compose'
-import { exportSupported } from './capabilities'
+import { exportSupported, resolveVideoEncoderConfig } from './capabilities'
 
 export type ExportProgress = (ratio: number, label: string) => void
 
@@ -11,12 +11,18 @@ export async function exportSequenceMp4(
   onProgress?: ExportProgress,
 ): Promise<Blob> {
   if (!exportSupported()) {
-    throw new Error('WebCodecs VideoEncoder required — use Chrome or Edge to export')
+    throw new Error('This browser is missing WebCodecs VideoEncoder — export needs a browser that supports it (Chrome, Edge, or Firefox 130+).')
   }
 
   const { width, height, frameRate } = doc.sequence
   const endTicks = Math.max(computeContentEnd(doc), frameRate)
   const frameCount = Math.max(1, endTicks)
+
+  const bitrate = Math.round(Math.min(20_000_000, Math.max(2_000_000, width * height * frameRate * 0.12)))
+  const resolved = await resolveVideoEncoderConfig(width, height, frameRate, bitrate)
+  if (!resolved) {
+    throw new Error(`This browser can't encode H.264 at ${width}×${height}@${frameRate} — try a smaller sequence.`)
+  }
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -41,14 +47,7 @@ export async function exportSequenceMp4(
     error: (e) => console.error('VideoEncoder error', e),
   })
 
-  encoder.configure({
-    codec: 'avc1.42001f',
-    width,
-    height,
-    bitrate: 4_000_000,
-    framerate: frameRate,
-    avc: { format: 'avc' },
-  })
+  encoder.configure(resolved.config)
 
   const frameDurationUs = Math.round(1_000_000 / frameRate)
 

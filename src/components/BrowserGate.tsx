@@ -2,12 +2,12 @@ import { detectCapabilities } from '../media/capabilities'
 
 export function BrowserGate() {
   const caps = detectCapabilities()
-  if (caps.webCodecsEncode && caps.chromiumLikely) return null
+  if (caps.webCodecsEncode && caps.videoFrame) return null
   return (
     <div className="browser-gate" role="status">
-      {!caps.webCodecsEncode
-        ? 'Export needs WebCodecs VideoEncoder — use Chrome or Edge for the full Rough Cut workflow.'
-        : 'Chromium recommended for reliable decode/export. Playback may still work here.'}
+      This browser doesn't support WebCodecs video encoding yet — playback and
+      trimming still work, but export needs a browser with it (Chrome, Edge,
+      or Firefox 130+).
     </div>
   )
 }
