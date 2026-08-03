@@ -1,0 +1,82 @@
+import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
+import type { ProjectDocument } from '../types'
+import { computeContentEnd } from '../store/document'
+import { composeFrame } from './compose'
+import { exportSupported } from './capabilities'
+
+export type ExportProgress = (ratio: number, label: string) => void
+
+export async function exportSequenceMp4(
+  doc: ProjectDocument,
+  onProgress?: ExportProgress,
+): Promise<Blob> {
+  if (!exportSupported()) {
+    throw new Error('WebCodecs VideoEncoder required — use Chrome or Edge to export')
+  }
+
+  const { width, height, frameRate } = doc.sequence
+  const endTicks = Math.max(computeContentEnd(doc), frameRate)
+  const frameCount = Math.max(1, endTicks)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+
+  const target = new ArrayBufferTarget()
+  const muxer = new Muxer({
+    target,
+    video: {
+      codec: 'avc',
+      width,
+      height,
+    },
+    fastStart: 'in-memory',
+    firstTimestampBehavior: 'offset',
+  })
+
+  const encoder = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error: (e) => console.error('VideoEncoder error', e),
+  })
+
+  encoder.configure({
+    codec: 'avc1.42001f',
+    width,
+    height,
+    bitrate: 4_000_000,
+    framerate: frameRate,
+    avc: { format: 'avc' },
+  })
+
+  const frameDurationUs = Math.round(1_000_000 / frameRate)
+
+  for (let i = 0; i < frameCount; i++) {
+    onProgress?.(i / frameCount, `Encoding frame ${i + 1}/${frameCount}`)
+    await composeFrame(doc, i, ctx)
+    const frame = new VideoFrame(canvas, {
+      timestamp: i * frameDurationUs,
+      duration: frameDurationUs,
+    })
+    encoder.encode(frame, { keyFrame: i % (frameRate * 2) === 0 })
+    frame.close()
+    // Yield so the UI can breathe
+    if (i % 5 === 0) await new Promise((r) => setTimeout(r, 0))
+  }
+
+  await encoder.flush()
+  encoder.close()
+  muxer.finalize()
+
+  onProgress?.(1, 'Done')
+  return new Blob([target.buffer], { type: 'video/mp4' })
+}
+
+export function downloadBlob(blob: Blob, filename: string): void {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}

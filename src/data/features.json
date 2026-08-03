@@ -1,0 +1,40 @@
+[
+  {
+    "title": "Tools",
+    "items": [
+      { "name": "Selection", "shortcut": "V", "note": "Select and drag clips on the timeline" },
+      { "name": "Razor", "shortcut": "C", "note": "Split clip(s) at the playhead" },
+      { "name": "Hand", "shortcut": "H", "note": "Pan the timeline" }
+    ]
+  },
+  {
+    "title": "Timeline",
+    "items": [
+      { "name": "Play / Pause", "shortcut": "Space" },
+      { "name": "Go to start", "shortcut": "Home" },
+      { "name": "Go to end", "shortcut": "End" },
+      { "name": "Step back", "shortcut": "←" },
+      { "name": "Step forward", "shortcut": "→" },
+      { "name": "Razor at playhead", "shortcut": "Ctrl+K" },
+      { "name": "Delete selected clips", "shortcut": "Delete / Backspace" },
+      { "name": "Zoom timeline", "shortcut": "Ctrl+= / Ctrl+-" }
+    ]
+  },
+  {
+    "title": "Edit",
+    "items": [
+      { "name": "Undo", "shortcut": "Ctrl+Z" },
+      { "name": "Redo", "shortcut": "Ctrl+Y / Ctrl+Shift+Z" },
+      { "name": "Import media", "shortcut": "Ctrl+I" },
+      { "name": "Save project", "shortcut": "Ctrl+S" },
+      { "name": "Open project", "shortcut": "Ctrl+O" },
+      { "name": "Export MP4", "shortcut": "Ctrl+E" }
+    ]
+  },
+  {
+    "title": "Help",
+    "items": [
+      { "name": "Keyboard shortcuts", "shortcut": "?", "note": "Opens this panel" }
+    ]
+  }
+]
