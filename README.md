@@ -2,6 +2,8 @@
 
 Web-based rough-cut NLE — import, cut, trim, play, export. Not Premiere; a sharp blade for a first assembly.
 
+**Live:** https://danmullin.github.io/rough-cut/
+
 **Tagline:** *Cut first. Polish later.*
 
 ## Run
