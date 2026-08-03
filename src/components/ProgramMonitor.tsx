@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { useDocStore } from '../store/documentStore'
 import { PlaybackEngine } from '../media/playback'
 
@@ -8,6 +8,7 @@ export function ProgramMonitor() {
   const playheadTicks = useDocStore((s) => s.playheadTicks)
   const playing = useDocStore((s) => s.playing)
   const doc = useDocStore((s) => s.doc)
+  const { width, height } = doc.sequence
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -39,11 +40,21 @@ export function ProgramMonitor() {
       <header className="panel-header">
         <h2>Program</h2>
         <span className="muted">
-          {doc.sequence.width}×{doc.sequence.height}
+          {width}×{height}
         </span>
       </header>
-      <div className="monitor-stage">
-        <canvas ref={canvasRef} className="monitor-canvas" />
+      <div
+        className="monitor-stage"
+        style={
+          {
+            '--seq-w': width,
+            '--seq-h': height,
+          } as CSSProperties
+        }
+      >
+        <div className="monitor-frame">
+          <canvas ref={canvasRef} className="monitor-canvas" />
+        </div>
       </div>
     </section>
   )

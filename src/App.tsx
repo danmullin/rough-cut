@@ -7,12 +7,16 @@ import { Timeline } from './components/Timeline'
 import { Inspector } from './components/Inspector'
 import { HelpModal } from './components/HelpModal'
 import { BrowserGate } from './components/BrowserGate'
+import { SplitHandle } from './components/SplitHandle'
 import { useEditorShortcuts } from './hooks/useEditorShortcuts'
 import { useAutosave } from './hooks/useAutosave'
+import { useLayoutSplits } from './hooks/useLayoutSplits'
 
 export default function App() {
   useEditorShortcuts()
   useAutosave()
+  const { layout, setLeftFromClientX, setRightFromClientX, setMonitorFromClientY } =
+    useLayoutSplits()
 
   return (
     <div className="app">
@@ -20,15 +24,39 @@ export default function App() {
       <MenuBar />
       <ControlBar />
       <div className="workspace">
-        <div className="left-stack">
+        <div className="left-stack" style={{ width: layout.leftPx }}>
           <ToolsRail />
           <MediaBin />
         </div>
+        <SplitHandle
+          orientation="vertical"
+          aria-label="Resize project panel"
+          onDrag={setLeftFromClientX}
+        />
         <div className="center-stack">
-          <ProgramMonitor />
-          <Timeline />
+          <div
+            className="monitor-pane"
+            style={{ flex: `0 0 ${layout.monitorPct}%` }}
+          >
+            <ProgramMonitor />
+          </div>
+          <SplitHandle
+            orientation="horizontal"
+            aria-label="Resize program preview"
+            onDrag={setMonitorFromClientY}
+          />
+          <div className="timeline-pane">
+            <Timeline />
+          </div>
         </div>
-        <Inspector />
+        <SplitHandle
+          orientation="vertical"
+          aria-label="Resize inspector"
+          onDrag={setRightFromClientX}
+        />
+        <div className="inspector-pane" style={{ width: layout.rightPx }}>
+          <Inspector />
+        </div>
       </div>
       <HelpModal />
     </div>
