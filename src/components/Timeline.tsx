@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useDocStore } from '../store/documentStore'
 import { clipDurationTicks, clipEndTicks } from '../types'
 import { computeContentEnd, normalizeDocument } from '../store/document'
@@ -44,6 +44,31 @@ export function Timeline() {
     const x = clientX - rect.left + el.scrollLeft - LABEL_W
     return Math.max(0, Math.round(x / zoom))
   }
+
+  // Ctrl+wheel (and trackpad pinch, which browsers report as ctrl+wheel) zooms
+  // the timeline anchored to the cursor. Registered as a real non-passive
+  // listener because React's onWheel can't reliably preventDefault the
+  // browser's native page-zoom gesture.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const cursorScreenX = e.clientX - rect.left
+      const currentZoom = useDocStore.getState().timelineZoom
+      const cursorTick = (cursorScreenX + el.scrollLeft - LABEL_W) / currentZoom
+      const factor = Math.exp(-e.deltaY * 0.0015)
+      const nextZoom = Math.max(2, Math.min(64, currentZoom * factor))
+      useDocStore.getState().setTimelineZoom(nextZoom)
+      requestAnimationFrame(() => {
+        el.scrollLeft = Math.max(0, cursorTick * nextZoom + LABEL_W - cursorScreenX)
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   const applyDrag = (d: DragState, clientX: number) => {
     const dxTicks = Math.round((clientX - d.originX) / zoom)
