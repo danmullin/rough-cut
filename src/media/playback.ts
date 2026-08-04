@@ -2,7 +2,7 @@ import type { ProjectDocument } from '../types'
 import { ticksToSeconds } from '../types'
 import { clipAtTime, computeContentEnd } from '../store/document'
 import { ensureObjectUrl } from './assetCache'
-import { composeFrame } from './compose'
+import { composeFrame, composeFrameLive } from './compose'
 
 export class PlaybackEngine {
   private raf = 0
@@ -14,6 +14,9 @@ export class PlaybackEngine {
   private audio: HTMLAudioElement | null = null
   private audioUrl: string | null = null
   private audioClipId: string | null = null
+  /** Video currently playing natively during a play run (see `paintPlaying`). */
+  private playingVideo: HTMLVideoElement | null = null
+  private playingClipId: string | null = null
   private getDoc: () => ProjectDocument
   private getPlayhead: () => number
   private setPlayhead: (t: number) => void
@@ -51,6 +54,28 @@ export class PlaybackEngine {
       this.canvas.height = doc.sequence.height
     }
     await composeFrame(doc, t, ctx)
+  }
+
+  /** Playback-only paint: lets the active clip's video decode forward natively (see `composeFrameLive`). */
+  private async paintPlaying(ticks: number): Promise<void> {
+    const doc = this.getDoc()
+    const ctx = this.canvas.getContext('2d')
+    if (!ctx) return
+    if (this.canvas.width !== doc.sequence.width || this.canvas.height !== doc.sequence.height) {
+      this.canvas.width = doc.sequence.width
+      this.canvas.height = doc.sequence.height
+    }
+    const { clipId, video } = await composeFrameLive(doc, ticks, ctx, this.playingClipId)
+    if (video !== this.playingVideo) this.playingVideo?.pause()
+    this.playingClipId = clipId
+    this.playingVideo = video
+  }
+
+  /** Pauses whatever video is currently decoding for playback (stop, scrub-to-paused, destroy). */
+  private pausePlayingVideo(): void {
+    this.playingVideo?.pause()
+    this.playingVideo = null
+    this.playingClipId = null
   }
 
   private async syncAudio(ticks: number): Promise<void> {
@@ -95,6 +120,7 @@ export class PlaybackEngine {
       if (!this.isPlaying()) {
         // Force a resync next time playback starts, however long from now that is.
         this.lastSetTicks = -1
+        this.pausePlayingVideo()
         return
       }
       const current = this.getPlayhead()
@@ -105,6 +131,7 @@ export class PlaybackEngine {
         this.anchorTime = now
         this.anchorTicks = current
         this.lastSetTicks = current
+        await this.paintPlaying(current)
         await this.syncAudio(current)
         return
       }
@@ -119,11 +146,18 @@ export class PlaybackEngine {
         next = end
         this.setPlaying(false)
         this.audio?.pause()
+        this.pausePlayingVideo()
+        if (next === current) return
+        this.lastSetTicks = next
+        this.setPlayhead(next)
+        await this.paint(next) // exact final frame, worth the one real seek
+        await this.syncAudio(next)
+        return
       }
       if (next === current) return
       this.lastSetTicks = next
       this.setPlayhead(next)
-      await this.paint(next)
+      await this.paintPlaying(next)
       await this.syncAudio(next)
     }
     this.raf = requestAnimationFrame(loop)
@@ -138,5 +172,6 @@ export class PlaybackEngine {
     this.raf = 0
     this.audio?.pause()
     this.audio = null
+    this.pausePlayingVideo()
   }
 }
