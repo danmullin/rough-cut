@@ -1,10 +1,13 @@
 import { formatTimecode, useDocStore } from '../store/documentStore'
+import { computeContentEnd } from '../store/document'
 
 export function ControlBar() {
   const playing = useDocStore((s) => s.playing)
   const playheadTicks = useDocStore((s) => s.playheadTicks)
   const fps = useDocStore((s) => s.doc.sequence.frameRate)
-  const duration = useDocStore((s) => s.doc.sequence.durationTicks)
+  // Real end of the last clip, not sequence.durationTicks — that carries a couple
+  // seconds of editing buffer past the content that "end of sequence" shouldn't include.
+  const duration = useDocStore((s) => computeContentEnd(s.doc))
   const zoom = useDocStore((s) => s.timelineZoom)
   const tool = useDocStore((s) => s.tool)
 

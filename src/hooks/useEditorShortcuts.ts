@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useDocStore } from '../store/documentStore'
+import { computeContentEnd } from '../store/document'
 import { importMediaFile, pickMediaFiles } from '../media/probe'
 import { openProjectFile, saveProjectFile } from '../io/projectFile'
 import { downloadBlob, exportSequenceMp4 } from '../media/exportMp4'
@@ -59,7 +60,7 @@ export function useEditorShortcuts(): void {
       }
       if (key === 'End') {
         e.preventDefault()
-        s.setPlayhead(s.doc.sequence.durationTicks)
+        s.setPlayhead(computeContentEnd(s.doc))
         return
       }
       if (key === 'ArrowLeft') {

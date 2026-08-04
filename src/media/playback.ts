@@ -1,6 +1,6 @@
 import type { ProjectDocument } from '../types'
 import { ticksToSeconds } from '../types'
-import { clipAtTime } from '../store/document'
+import { clipAtTime, computeContentEnd } from '../store/document'
 import { ensureObjectUrl } from './assetCache'
 import { composeFrame } from './compose'
 
@@ -111,7 +111,10 @@ export class PlaybackEngine {
       const doc = this.getDoc()
       const elapsedSec = (now - this.anchorTime) / 1000
       let next = this.anchorTicks + Math.round(elapsedSec * doc.sequence.frameRate)
-      const end = Math.max(doc.sequence.durationTicks, 1)
+      // Stop at the last real frame of content, not sequence.durationTicks — that
+      // also carries a couple seconds of editing buffer past the last clip so you
+      // can drag clips further right, which isn't meant to be "played through".
+      const end = Math.max(computeContentEnd(doc), 1)
       if (next >= end) {
         next = end
         this.setPlaying(false)
