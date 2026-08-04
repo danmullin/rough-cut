@@ -656,6 +656,21 @@ body.is-resizing-horizontal {
   border-top: 8px solid var(--playhead);
 }
 
+.playhead-grip {
+  position: absolute;
+  top: 0;
+  height: 28px;
+  width: 16px;
+  transform: translateX(-8px);
+  z-index: 6;
+  cursor: grab;
+  touch-action: none;
+}
+
+.playhead-grip:active {
+  cursor: grabbing;
+}
+
 .inspector {
   display: flex;
   flex-direction: column;

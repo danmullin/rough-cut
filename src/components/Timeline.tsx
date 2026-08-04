@@ -25,6 +25,7 @@ export function Timeline() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const panRef = useRef<{ x: number; scroll: number } | null>(null)
+  const scrubRef = useRef(false)
 
   const widthPx = Math.max(800, doc.sequence.durationTicks * zoom + 200)
 
@@ -135,7 +136,7 @@ export function Timeline() {
           useDocStore.getState().placeAsset(assetId, tickFromClientX(e.clientX))
         }}
         onPointerDown={(e) => {
-          if ((e.target as HTMLElement).closest('.clip')) return
+          if ((e.target as HTMLElement).closest('.clip, .playhead-grip')) return
           if (tool === 'hand') {
             const el = scrollRef.current
             if (!el) return
@@ -146,15 +147,23 @@ export function Timeline() {
           const tick = tickFromClientX(e.clientX)
           useDocStore.getState().setPlayhead(tick)
           if (tool === 'razor') useDocStore.getState().razorAtPlayhead()
+          scrubRef.current = true
+          ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
         }}
         onPointerMove={(e) => {
           const pan = panRef.current
           const el = scrollRef.current
-          if (!pan || !el || tool !== 'hand') return
-          el.scrollLeft = pan.scroll - (e.clientX - pan.x)
+          if (pan && el && tool === 'hand') {
+            el.scrollLeft = pan.scroll - (e.clientX - pan.x)
+            return
+          }
+          if (scrubRef.current) {
+            useDocStore.getState().setPlayhead(tickFromClientX(e.clientX))
+          }
         }}
         onPointerUp={() => {
           panRef.current = null
+          scrubRef.current = false
         }}
       >
         <div className="timeline-inner" style={{ width: widthPx }}>
@@ -237,6 +246,24 @@ export function Timeline() {
             className="playhead"
             style={{ left: LABEL_W + playhead * zoom }}
             aria-hidden
+          />
+          <div
+            className="playhead-grip"
+            style={{ left: LABEL_W + playhead * zoom }}
+            title="Drag to scrub"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              scrubRef.current = true
+              ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+            }}
+            onPointerMove={(e) => {
+              if (!scrubRef.current) return
+              useDocStore.getState().setPlayhead(tickFromClientX(e.clientX))
+            }}
+            onPointerUp={(e) => {
+              scrubRef.current = false
+              ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+            }}
           />
         </div>
       </div>
