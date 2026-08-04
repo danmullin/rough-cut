@@ -6,6 +6,10 @@ import { formatTimecode } from '../store/documentStore'
 
 const TRACK_H = 52
 const LABEL_W = 72
+/** Fraction across the visible timeline where playback starts pulling the view forward. */
+const FOLLOW_FRACTION = 0.82
+/** Fraction from the left edge to land on when the playhead reappears from fully out of view. */
+const RECENTER_FRACTION = 0.15
 
 type DragState = {
   clipId: string
@@ -19,6 +23,7 @@ type DragState = {
 export function Timeline() {
   const doc = useDocStore((s) => s.doc)
   const playhead = useDocStore((s) => s.playheadTicks)
+  const playing = useDocStore((s) => s.playing)
   const zoom = useDocStore((s) => s.timelineZoom)
   const selected = useDocStore((s) => s.selectedClipIds)
   const tool = useDocStore((s) => s.tool)
@@ -70,6 +75,26 @@ export function Timeline() {
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
+
+  // Follow the playhead during playback: once it crosses FOLLOW_FRACTION across
+  // the visible timeline, scroll forward to keep it there instead of letting it
+  // run off the edge. If it's ever fully out of view (e.g. a seek mid-playback),
+  // snap back so it's comfortably visible rather than continuing to chase.
+  useEffect(() => {
+    if (!playing) return
+    if (panRef.current || dragRef.current || scrubRef.current) return
+    const el = scrollRef.current
+    if (!el) return
+    const playheadPx = LABEL_W + playhead * zoom
+    const viewStart = el.scrollLeft
+    const viewEnd = viewStart + el.clientWidth
+    const followAt = viewStart + el.clientWidth * FOLLOW_FRACTION
+    if (playheadPx > followAt) {
+      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth * FOLLOW_FRACTION)
+    } else if (playheadPx < viewStart || playheadPx > viewEnd) {
+      el.scrollLeft = Math.max(0, playheadPx - el.clientWidth * RECENTER_FRACTION)
+    }
+  }, [playhead, playing, zoom])
 
   const applyDrag = (d: DragState, clientX: number) => {
     const dxTicks = Math.round((clientX - d.originX) / zoom)
