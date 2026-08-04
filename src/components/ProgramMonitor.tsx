@@ -32,15 +32,19 @@ export function ProgramMonitor() {
   }, [])
 
   useEffect(() => {
-    // A fast scrub can fire several playheadTicks changes within one
-    // animation frame — batch those into a single paint of the latest
-    // position instead of composing a frame per pointermove.
+    // During playback the engine already paints every tick it advances —
+    // repainting here too would double every composeFrame/seek per frame.
+    // This path is for everything else that moves the playhead (scrub,
+    // razor, programmatic seeks), where a fast scrub can fire several
+    // playheadTicks changes within one animation frame — batch those into
+    // a single paint of the latest position instead of one per pointermove.
+    if (playing) return
     cancelAnimationFrame(paintRafRef.current)
     paintRafRef.current = requestAnimationFrame(() => {
       void engineRef.current?.paint(useDocStore.getState().playheadTicks)
     })
     return () => cancelAnimationFrame(paintRafRef.current)
-  }, [playheadTicks, doc])
+  }, [playheadTicks, doc, playing])
 
   useEffect(() => {
     if (!playing) engineRef.current?.stopAudio()

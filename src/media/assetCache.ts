@@ -51,65 +51,43 @@ export function revokeAllObjectUrls(): void {
   videoLoads.clear()
 }
 
-type SeekState = { pending: Promise<void> | null; latestTarget: number }
-const seekStates = new WeakMap<HTMLVideoElement, SeekState>()
-
 /**
- * Seeks toward `timeSec`, but coalesces overlapping requests: fast scrubbing
- * (or continuous playback, which calls this once per animation frame) fires
- * seeks faster than the decoder can service them, and naively setting
- * `currentTime` on every call races a pile of stale `seeked` listeners
- * against each other, resolving in unpredictable order and drawing frames
- * out of sequence. So every caller just registers "this is the latest
- * position we want" and awaits one shared in-flight seek.
+ * Seeks toward `timeSec`. Deliberately does NOT gate overlapping calls behind
+ * a single shared in-flight promise — that was tried (twice) and both times
+ * throttled throughput to the browser's real seek latency, since no new seek
+ * could even start until the previous one's `seeked` fully fired. During fast
+ * scrubbing or continuous playback that latency alone drops frames.
  *
- * Each run is a single seek-and-settle cycle to whatever the newest target
- * is *when the cycle starts* — it does NOT loop to re-chase a target that
- * keeps moving. During playback the target advances on nearly every frame
- * and never stops moving, so a chasing loop would never exit, `pending`
- * would never clear, and every later call would await one promise that
- * resolves only once playback stops — i.e. almost nothing paints. One
- * seek per cycle keeps forward progress: whichever call is "latest" when
- * a cycle finishes kicks off the next cycle to the freshest target.
+ * Instead, every call just writes `currentTime` immediately and awaits its
+ * own `seeked`. The browser already coalesces rapid `currentTime` writes
+ * internally (only the most recent one before the previous seek settles
+ * actually takes effect) and fires one `seeked` that every still-attached
+ * listener receives — so stale/superseded calls resolve alongside the
+ * latest one instead of blocking it, and `composeFrame` always draws
+ * whatever the video is actually showing at that moment, not a stale target.
  */
 export async function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void> {
-  const target = Math.max(0, Math.min(timeSec, (video.duration || 0) - 0.001))
-  let state = seekStates.get(video)
-  if (!state) {
-    state = { pending: null, latestTarget: video.currentTime }
-    seekStates.set(video, state)
-  }
-  state.latestTarget = target
-  if (state.pending) return state.pending
-
-  const s = state
-  const run = async (): Promise<void> => {
-    const goal = s.latestTarget
-    if (Math.abs(video.currentTime - goal) < 0.001) return
-    await new Promise<void>((resolve, reject) => {
-      const onSeeked = () => {
-        video.removeEventListener('seeked', onSeeked)
-        video.removeEventListener('error', onError)
-        resolve()
-      }
-      const onError = () => {
-        video.removeEventListener('seeked', onSeeked)
-        video.removeEventListener('error', onError)
-        reject(new Error('Seek failed'))
-      }
-      video.addEventListener('seeked', onSeeked)
-      video.addEventListener('error', onError)
-      try {
-        video.currentTime = goal
-      } catch (e) {
-        video.removeEventListener('seeked', onSeeked)
-        video.removeEventListener('error', onError)
-        reject(e)
-      }
-    })
-  }
-  state.pending = run().finally(() => {
-    state!.pending = null
+  const t = Math.max(0, Math.min(timeSec, (video.duration || 0) - 0.001))
+  if (Math.abs(video.currentTime - t) < 0.001) return
+  await new Promise<void>((resolve, reject) => {
+    const onSeeked = () => {
+      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('error', onError)
+      resolve()
+    }
+    const onError = () => {
+      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('error', onError)
+      reject(new Error('Seek failed'))
+    }
+    video.addEventListener('seeked', onSeeked)
+    video.addEventListener('error', onError)
+    try {
+      video.currentTime = t
+    } catch (e) {
+      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('error', onError)
+      reject(e)
+    }
   })
-  return state.pending
 }
