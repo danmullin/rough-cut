@@ -56,12 +56,21 @@ const seekStates = new WeakMap<HTMLVideoElement, SeekState>()
 
 /**
  * Seeks toward `timeSec`, but coalesces overlapping requests: fast scrubbing
- * fires seeks faster than the decoder can service them, and naively setting
+ * (or continuous playback, which calls this once per animation frame) fires
+ * seeks faster than the decoder can service them, and naively setting
  * `currentTime` on every call races a pile of stale `seeked` listeners
  * against each other, resolving in unpredictable order and drawing frames
- * out of sequence. Instead, every caller just registers "this is the latest
- * position we want" and awaits one running seek loop that always chases the
- * newest target, dropping any intermediate ones it never got to.
+ * out of sequence. So every caller just registers "this is the latest
+ * position we want" and awaits one shared in-flight seek.
+ *
+ * Each run is a single seek-and-settle cycle to whatever the newest target
+ * is *when the cycle starts* — it does NOT loop to re-chase a target that
+ * keeps moving. During playback the target advances on nearly every frame
+ * and never stops moving, so a chasing loop would never exit, `pending`
+ * would never clear, and every later call would await one promise that
+ * resolves only once playback stops — i.e. almost nothing paints. One
+ * seek per cycle keeps forward progress: whichever call is "latest" when
+ * a cycle finishes kicks off the next cycle to the freshest target.
  */
 export async function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void> {
   const target = Math.max(0, Math.min(timeSec, (video.duration || 0) - 0.001))
@@ -75,30 +84,29 @@ export async function seekVideo(video: HTMLVideoElement, timeSec: number): Promi
 
   const s = state
   const run = async (): Promise<void> => {
-    while (Math.abs(video.currentTime - s.latestTarget) >= 0.001) {
-      const goal = s.latestTarget
-      await new Promise<void>((resolve, reject) => {
-        const onSeeked = () => {
-          video.removeEventListener('seeked', onSeeked)
-          video.removeEventListener('error', onError)
-          resolve()
-        }
-        const onError = () => {
-          video.removeEventListener('seeked', onSeeked)
-          video.removeEventListener('error', onError)
-          reject(new Error('Seek failed'))
-        }
-        video.addEventListener('seeked', onSeeked)
-        video.addEventListener('error', onError)
-        try {
-          video.currentTime = goal
-        } catch (e) {
-          video.removeEventListener('seeked', onSeeked)
-          video.removeEventListener('error', onError)
-          reject(e)
-        }
-      })
-    }
+    const goal = s.latestTarget
+    if (Math.abs(video.currentTime - goal) < 0.001) return
+    await new Promise<void>((resolve, reject) => {
+      const onSeeked = () => {
+        video.removeEventListener('seeked', onSeeked)
+        video.removeEventListener('error', onError)
+        resolve()
+      }
+      const onError = () => {
+        video.removeEventListener('seeked', onSeeked)
+        video.removeEventListener('error', onError)
+        reject(new Error('Seek failed'))
+      }
+      video.addEventListener('seeked', onSeeked)
+      video.addEventListener('error', onError)
+      try {
+        video.currentTime = goal
+      } catch (e) {
+        video.removeEventListener('seeked', onSeeked)
+        video.removeEventListener('error', onError)
+        reject(e)
+      }
+    })
   }
   state.pending = run().finally(() => {
     state!.pending = null
