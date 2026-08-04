@@ -149,6 +149,16 @@ button:disabled {
   letter-spacing: 0.12em;
 }
 
+.build-stamp {
+  display: block;
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  opacity: 0.55;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  cursor: default;
+}
+
 .menu-actions {
   display: flex;
   flex-wrap: wrap;

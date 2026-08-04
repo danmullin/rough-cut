@@ -3,6 +3,7 @@ import { importMediaFile, pickMediaFiles } from '../media/probe'
 import { openProjectFile, saveProjectFile } from '../io/projectFile'
 import { downloadBlob, exportSequenceMp4 } from '../media/exportMp4'
 import { exportSupported } from '../media/capabilities'
+import { BuildStamp } from './BuildStamp'
 
 export function MenuBar() {
   const doc = useDocStore((s) => s.doc)
@@ -51,6 +52,7 @@ export function MenuBar() {
         <div>
           <strong>Rough Cut</strong>
           <span className="brand-sub">web NLE</span>
+          <BuildStamp />
         </div>
       </div>
       <nav className="menu-actions">

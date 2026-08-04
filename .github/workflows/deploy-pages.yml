@@ -24,6 +24,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node _stamp-version.js
       - run: npm run build
         env:
           VITE_BASE: /rough-cut/
