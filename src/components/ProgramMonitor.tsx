@@ -5,6 +5,7 @@ import { PlaybackEngine } from '../media/playback'
 export function ProgramMonitor() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const engineRef = useRef<PlaybackEngine | null>(null)
+  const paintRafRef = useRef(0)
   const playheadTicks = useDocStore((s) => s.playheadTicks)
   const playing = useDocStore((s) => s.playing)
   const doc = useDocStore((s) => s.doc)
@@ -24,11 +25,21 @@ export function ProgramMonitor() {
     engineRef.current = engine
     engine.start()
     void engine.paint()
-    return () => engine.destroy()
+    return () => {
+      cancelAnimationFrame(paintRafRef.current)
+      engine.destroy()
+    }
   }, [])
 
   useEffect(() => {
-    void engineRef.current?.paint(playheadTicks)
+    // A fast scrub can fire several playheadTicks changes within one
+    // animation frame — batch those into a single paint of the latest
+    // position instead of composing a frame per pointermove.
+    cancelAnimationFrame(paintRafRef.current)
+    paintRafRef.current = requestAnimationFrame(() => {
+      void engineRef.current?.paint(useDocStore.getState().playheadTicks)
+    })
+    return () => cancelAnimationFrame(paintRafRef.current)
   }, [playheadTicks, doc])
 
   useEffect(() => {
