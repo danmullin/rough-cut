@@ -10,6 +10,10 @@ const LABEL_W = 72
 const FOLLOW_FRACTION = 0.82
 /** Fraction from the left edge to land on when the playhead reappears from fully out of view. */
 const RECENTER_FRACTION = 0.15
+/** Pixels from the container's edge where dragging the playhead starts auto-scrolling. */
+const SCRUB_EDGE_MARGIN = 48
+/** Max auto-scroll speed (px/frame) once the pointer is at or past the edge. */
+const SCRUB_MAX_SCROLL_SPEED = 22
 
 type DragState = {
   clipId: string
@@ -31,6 +35,8 @@ export function Timeline() {
   const dragRef = useRef<DragState | null>(null)
   const panRef = useRef<{ x: number; scroll: number } | null>(null)
   const scrubRef = useRef(false)
+  const scrubClientXRef = useRef<number | null>(null)
+  const autoScrollRafRef = useRef(0)
 
   const widthPx = Math.max(800, doc.sequence.durationTicks * zoom + 200)
 
@@ -50,6 +56,47 @@ export function Timeline() {
     const x = clientX - rect.left + el.scrollLeft - LABEL_W
     return Math.max(0, Math.round(x / zoom))
   }
+
+  // While actively scrubbing the playhead (grip or background drag), holding
+  // the pointer near or past either edge of the visible timeline keeps
+  // scrolling in that direction — same pattern as dragging near a window
+  // edge in most editors — instead of requiring you to release and re-grab.
+  const stopAutoScroll = () => {
+    if (autoScrollRafRef.current) {
+      cancelAnimationFrame(autoScrollRafRef.current)
+      autoScrollRafRef.current = 0
+    }
+  }
+
+  const startAutoScroll = () => {
+    if (autoScrollRafRef.current) return
+    const step = () => {
+      const el = scrollRef.current
+      const clientX = scrubClientXRef.current
+      if (!scrubRef.current || !el || clientX == null) {
+        autoScrollRafRef.current = 0
+        return
+      }
+      const rect = el.getBoundingClientRect()
+      const leftEdge = rect.left + SCRUB_EDGE_MARGIN
+      const rightEdge = rect.right - SCRUB_EDGE_MARGIN
+      let dx = 0
+      if (clientX < leftEdge) {
+        dx = -SCRUB_MAX_SCROLL_SPEED * Math.min(1, (leftEdge - clientX) / SCRUB_EDGE_MARGIN)
+      } else if (clientX > rightEdge) {
+        dx = SCRUB_MAX_SCROLL_SPEED * Math.min(1, (clientX - rightEdge) / SCRUB_EDGE_MARGIN)
+      }
+      if (dx !== 0) {
+        const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth)
+        el.scrollLeft = Math.max(0, Math.min(maxScroll, el.scrollLeft + dx))
+        useDocStore.getState().setPlayhead(tickFromClientX(clientX))
+      }
+      autoScrollRafRef.current = requestAnimationFrame(step)
+    }
+    autoScrollRafRef.current = requestAnimationFrame(step)
+  }
+
+  useEffect(() => stopAutoScroll, [])
 
   // Ctrl+wheel (and trackpad pinch, which browsers report as ctrl+wheel) zooms
   // the timeline anchored to the cursor. Registered as a real non-passive
@@ -173,6 +220,8 @@ export function Timeline() {
           useDocStore.getState().setPlayhead(tick)
           if (tool === 'razor') useDocStore.getState().razorAtPlayhead()
           scrubRef.current = true
+          scrubClientXRef.current = e.clientX
+          startAutoScroll()
           ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
         }}
         onPointerMove={(e) => {
@@ -183,12 +232,15 @@ export function Timeline() {
             return
           }
           if (scrubRef.current) {
+            scrubClientXRef.current = e.clientX
             useDocStore.getState().setPlayhead(tickFromClientX(e.clientX))
           }
         }}
         onPointerUp={() => {
           panRef.current = null
           scrubRef.current = false
+          scrubClientXRef.current = null
+          stopAutoScroll()
         }}
       >
         <div className="timeline-inner" style={{ width: widthPx }}>
@@ -279,14 +331,19 @@ export function Timeline() {
             onPointerDown={(e) => {
               e.stopPropagation()
               scrubRef.current = true
+              scrubClientXRef.current = e.clientX
+              startAutoScroll()
               ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
             }}
             onPointerMove={(e) => {
               if (!scrubRef.current) return
+              scrubClientXRef.current = e.clientX
               useDocStore.getState().setPlayhead(tickFromClientX(e.clientX))
             }}
             onPointerUp={(e) => {
               scrubRef.current = false
+              scrubClientXRef.current = null
+              stopAutoScroll()
               ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
             }}
           />
