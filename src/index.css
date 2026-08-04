@@ -54,6 +54,17 @@ body,
 #root {
   margin: 0;
   height: 100%;
+  /* App-like UI, not a document — text shouldn't drag-select while clicking
+     around clips, buttons, and panels. Inputs/textareas opt back in below. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 button,
