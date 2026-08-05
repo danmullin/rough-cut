@@ -293,6 +293,9 @@ export function Timeline() {
                 }}
                 onDrop={(e) => {
                   e.preventDefault()
+                  // Stop the parent .timeline-scroll fallback from also placing
+                  // the same asset onto V1/A1.
+                  e.stopPropagation()
                   const assetId = e.dataTransfer.getData('text/rough-cut-asset')
                   if (!assetId) return
                   useDocStore.getState().placeAsset(assetId, tickFromClientX(e.clientX), track.id)
