@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useDocStore } from '../store/documentStore'
 import { clipDurationTicks, clipEndTicks } from '../types'
-import { computeContentEnd, normalizeDocument } from '../store/document'
+import { computeContentEnd, findClip, normalizeDocument } from '../store/document'
 import { formatTimecode } from '../store/documentStore'
 
 const TRACK_H = 52
@@ -15,13 +15,18 @@ const SCRUB_EDGE_MARGIN = 48
 /** Max auto-scroll speed (px/frame) once the pointer is at or past the edge. */
 const SCRUB_MAX_SCROLL_SPEED = 22
 
-type DragState = {
+type DragTarget = {
   clipId: string
-  mode: 'move' | 'in' | 'out'
-  originX: number
   originStart: number
   originIn: number
   originOut: number
+}
+
+type DragState = {
+  mode: 'move' | 'in' | 'out'
+  originX: number
+  /** Primary grabbed clip plus its linked partner (unless Alt overrode linking), moved/trimmed together. */
+  targets: DragTarget[]
 }
 
 export function Timeline() {
@@ -146,36 +151,38 @@ export function Timeline() {
   const applyDrag = (d: DragState, clientX: number) => {
     const dxTicks = Math.round((clientX - d.originX) / zoom)
     useDocStore.setState((st) => {
+      const targetMap = new Map(d.targets.map((t) => [t.clipId, t]))
       const tracks = st.doc.tracks.map((t) => ({
         ...t,
         clips: t.clips.map((c) => {
-          if (c.id !== d.clipId) return c
+          const target = targetMap.get(c.id)
+          if (!target) return c
           if (d.mode === 'move') {
-            return { ...c, timelineStart: Math.max(0, d.originStart + dxTicks) }
+            return { ...c, timelineStart: Math.max(0, target.originStart + dxTicks) }
           }
           if (d.mode === 'in') {
-            const newStart = Math.max(0, d.originStart + dxTicks)
-            const delta = newStart - d.originStart
-            const newIn = d.originIn + delta
-            if (newIn >= d.originOut - 1) return c
-            return { ...c, timelineStart: newStart, in: newIn, out: d.originOut }
+            const newStart = Math.max(0, target.originStart + dxTicks)
+            const delta = newStart - target.originStart
+            const newIn = target.originIn + delta
+            if (newIn >= target.originOut - 1) return c
+            return { ...c, timelineStart: newStart, in: newIn, out: target.originOut }
           }
-          const newEnd = Math.max(d.originStart + 1, clipEndTicks({
+          const newEnd = Math.max(target.originStart + 1, clipEndTicks({
             id: c.id,
             assetId: c.assetId,
             trackId: c.trackId,
-            timelineStart: d.originStart,
-            in: d.originIn,
-            out: d.originOut,
+            timelineStart: target.originStart,
+            in: target.originIn,
+            out: target.originOut,
           }) + dxTicks)
-          const newOut = d.originIn + (newEnd - d.originStart)
+          const newOut = target.originIn + (newEnd - target.originStart)
           const asset = st.doc.assets.find((a) => a.id === c.assetId)
           const maxOut = asset?.durationTicks ?? newOut
-          if (newOut <= d.originIn + 1) return c
+          if (newOut <= target.originIn + 1) return c
           return {
             ...c,
-            timelineStart: d.originStart,
-            in: d.originIn,
+            timelineStart: target.originStart,
+            in: target.originIn,
             out: Math.min(newOut, maxOut),
           }
         }),
@@ -269,16 +276,25 @@ export function Timeline() {
                   const w = Math.max(4, clipDurationTicks(clip) * zoom)
                   const left = clip.timelineStart * zoom
                   const isSel = selected.includes(clip.id)
+                  const isLinked = Boolean(clip.linkedClipId)
                   return (
                     <div
                       key={clip.id}
-                      className={isSel ? 'clip is-selected' : 'clip'}
+                      className={[
+                        'clip',
+                        isSel ? 'is-selected' : '',
+                        isLinked ? 'is-linked' : '',
+                      ].filter(Boolean).join(' ')}
                       style={{ left, width: w }}
                       title={asset?.name ?? clip.id}
                       onPointerDown={(e) => {
                         e.stopPropagation()
                         const s = useDocStore.getState()
-                        s.selectClips([clip.id], e.shiftKey)
+                        // Alt overrides linked selection so you can grab just the
+                        // video or just the audio half of a linked clip pair,
+                        // matching Premiere's Alt/Option+click.
+                        const ignoreLink = e.altKey
+                        s.selectClips([clip.id], { additive: e.shiftKey, ignoreLink })
                         if (tool === 'razor') {
                           s.setPlayhead(tickFromClientX(e.clientX))
                           s.razorAtPlayhead()
@@ -290,19 +306,26 @@ export function Timeline() {
                           | 'out'
                           | undefined
                         s.pushHistory()
-                        dragRef.current = {
-                          clipId: clip.id,
-                          mode: edge ?? 'move',
-                          originX: e.clientX,
-                          originStart: clip.timelineStart,
-                          originIn: clip.in,
-                          originOut: clip.out,
+                        const targets: DragTarget[] = [
+                          { clipId: clip.id, originStart: clip.timelineStart, originIn: clip.in, originOut: clip.out },
+                        ]
+                        if (!ignoreLink && clip.linkedClipId) {
+                          const partner = findClip(s.doc, clip.linkedClipId)
+                          if (partner) {
+                            targets.push({
+                              clipId: partner.clip.id,
+                              originStart: partner.clip.timelineStart,
+                              originIn: partner.clip.in,
+                              originOut: partner.clip.out,
+                            })
+                          }
                         }
+                        dragRef.current = { mode: edge ?? 'move', originX: e.clientX, targets }
                         ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
                       }}
                       onPointerMove={(e) => {
                         const d = dragRef.current
-                        if (!d || d.clipId !== clip.id) return
+                        if (!d || !d.targets.some((t) => t.clipId === clip.id)) return
                         applyDrag(d, e.clientX)
                       }}
                       onPointerUp={() => {

@@ -2,7 +2,7 @@
   {
     "title": "Tools",
     "items": [
-      { "name": "Selection", "shortcut": "V", "note": "Select and drag clips on the timeline" },
+      { "name": "Selection", "shortcut": "V", "note": "Select and drag clips on the timeline. Video and its embedded audio are linked (🔗) — click, drag, and delete move/remove both" },
       { "name": "Razor", "shortcut": "C", "note": "Split clip(s) at the playhead" },
       { "name": "Hand", "shortcut": "H", "note": "Pan the timeline" }
     ]
@@ -17,7 +17,8 @@
       { "name": "Step forward", "shortcut": "→" },
       { "name": "Razor at playhead", "shortcut": "Ctrl+K" },
       { "name": "Delete selected clips", "shortcut": "Delete / Backspace" },
-      { "name": "Zoom timeline", "shortcut": "Ctrl+= / Ctrl+-" }
+      { "name": "Zoom timeline", "shortcut": "Ctrl+= / Ctrl+-" },
+      { "name": "Select clip ignoring link", "shortcut": "Alt+Click", "note": "Grab just the video or just the audio half of a linked clip" }
     ]
   },
   {

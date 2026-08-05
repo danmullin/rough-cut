@@ -120,18 +120,43 @@ export function placeAssetOnTimeline(
     timelineStart ??
     track.clips.reduce((m, c) => Math.max(m, clipEndTicks(c)), 0)
 
+  // Video imports carry their own embedded audio. Give it a linked clip on
+  // the audio track so it shows up connected in the timeline, the way
+  // Premiere links a clip's video and audio halves — even a silent video
+  // just gets a paired clip that plays back silence.
+  const audioTrack = asset.kind === 'video' ? doc.tracks.find((t) => t.type === 'audio') : undefined
+  const clipId = newId('clip')
+  const audioClipId = audioTrack ? newId('clip') : undefined
+
   const clip: Clip = {
-    id: newId('clip'),
+    id: clipId,
     assetId: asset.id,
     trackId: track.id,
     timelineStart: start,
     in: 0,
     out: asset.durationTicks,
+    linkedClipId: audioClipId,
   }
 
-  const tracks = doc.tracks.map((t) =>
+  let tracks = doc.tracks.map((t) =>
     t.id === track.id ? { ...t, clips: [...t.clips, clip] } : t,
   )
+
+  if (audioTrack && audioClipId) {
+    const audioClip: Clip = {
+      id: audioClipId,
+      assetId: asset.id,
+      trackId: audioTrack.id,
+      timelineStart: start,
+      in: 0,
+      out: asset.durationTicks,
+      linkedClipId: clipId,
+    }
+    tracks = tracks.map((t) =>
+      t.id === audioTrack.id ? { ...t, clips: [...t.clips, audioClip] } : t,
+    )
+  }
+
   const next = { ...doc, tracks }
   next.sequence = {
     ...next.sequence,

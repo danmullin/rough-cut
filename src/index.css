@@ -640,6 +640,10 @@ body.is-resizing-horizontal {
   outline-offset: 1px;
 }
 
+.clip.is-linked {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
 .clip-label {
   flex: 1;
   font-size: 0.72rem;
@@ -648,6 +652,13 @@ body.is-resizing-horizontal {
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.clip.is-linked .clip-label::before {
+  content: '\1F517';
+  margin-right: 0.3em;
+  font-size: 0.65em;
+  opacity: 0.75;
 }
 
 .clip-edge {

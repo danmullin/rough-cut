@@ -27,6 +27,13 @@ export interface Clip {
   in: number
   /** Source out-point exclusive (ticks) */
   out: number
+  /**
+   * Id of the clip this one is linked to (e.g. a video clip's embedded audio,
+   * placed as its own clip on an audio track). Mirrors Premiere's linked
+   * selection: a plain click/drag affects both sides, Alt overrides it to
+   * act on just the one you grabbed.
+   */
+  linkedClipId?: string
 }
 
 export type TrackType = 'video' | 'audio'

@@ -41,7 +41,7 @@ Shell patterns borrow from [Penultimate](../vector) (chrome, undo, shortcuts, `f
 
 ### Tools
 
-- **Selection** — `V` — Select and drag clips on the timeline
+- **Selection** — `V` — Select and drag clips on the timeline. Video and its embedded audio are linked (🔗) — click, drag, and delete move/remove both
 - **Razor** — `C` — Split clip(s) at the playhead
 - **Hand** — `H` — Pan the timeline
 
@@ -55,6 +55,7 @@ Shell patterns borrow from [Penultimate](../vector) (chrome, undo, shortcuts, `f
 - **Razor at playhead** — `Ctrl+K`
 - **Delete selected clips** — `Delete / Backspace`
 - **Zoom timeline** — `Ctrl+= / Ctrl+-`
+- **Select clip ignoring link** — `Alt+Click` — Grab just the video or just the audio half of a linked clip
 
 ### Edit
 

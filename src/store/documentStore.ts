@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { ProjectDocument, ToolId } from '../types'
+import type { Clip, ProjectDocument, ToolId } from '../types'
 import { clipDurationTicks, clipEndTicks, newId } from '../types'
 import {
   computeContentEnd,
   createEmptyDocument,
+  findClip,
   normalizeDocument,
   persistableDocument,
   placeAssetOnTimeline,
@@ -36,7 +37,7 @@ interface EditorState {
   newProject: () => void
 
   setTool: (tool: ToolId) => void
-  selectClips: (ids: string[], additive?: boolean) => void
+  selectClips: (ids: string[], opts?: { additive?: boolean; ignoreLink?: boolean }) => void
   clearSelection: () => void
   setPlayhead: (ticks: number) => void
   setPlaying: (playing: boolean) => void
@@ -57,6 +58,16 @@ interface EditorState {
 
 function clampPlayhead(doc: ProjectDocument, ticks: number): number {
   return Math.max(0, Math.min(ticks, Math.max(0, doc.sequence.durationTicks)))
+}
+
+/** Pulls in each id's linked partner (e.g. a video clip's paired audio clip) so a plain click/drag/delete affects both halves, like Premiere's linked selection. */
+function expandLinkedIds(doc: ProjectDocument, ids: string[]): string[] {
+  const out = new Set(ids)
+  for (const id of ids) {
+    const partner = findClip(doc, id)?.clip.linkedClipId
+    if (partner) out.add(partner)
+  }
+  return [...out]
 }
 
 export const useDocStore = create<EditorState>((set, get) => ({
@@ -137,13 +148,15 @@ export const useDocStore = create<EditorState>((set, get) => ({
   },
 
   setTool: (tool) => set({ tool }),
-  selectClips: (ids, additive = false) => {
+  selectClips: (ids, opts) => {
+    const { additive = false, ignoreLink = false } = opts ?? {}
+    const expanded = ignoreLink ? ids : expandLinkedIds(get().doc, ids)
     if (!additive) {
-      set({ selectedClipIds: ids })
+      set({ selectedClipIds: expanded })
       return
     }
     const cur = new Set(get().selectedClipIds)
-    for (const id of ids) {
+    for (const id of expanded) {
       if (cur.has(id)) cur.delete(id)
       else cur.add(id)
     }
@@ -176,45 +189,52 @@ export const useDocStore = create<EditorState>((set, get) => ({
 
   razorAtPlayhead: () => {
     const { doc, playheadTicks, selectedClipIds } = get()
-    let changed = false
-    const tracks = doc.tracks.map((track) => {
-      const nextClips = []
+
+    const willCut = (clip: Clip): boolean => {
+      if (!(playheadTicks > clip.timelineStart && playheadTicks < clipEndTicks(clip))) return false
+      if (selectedClipIds.length && !selectedClipIds.includes(clip.id)) return false
+      const mid = clip.in + (playheadTicks - clip.timelineStart)
+      return mid > clip.in && mid < clip.out
+    }
+
+    // A left fragment keeps its clip's original id, so an unrelated linked
+    // partner's `linkedClipId` (pointing at that id) stays valid untouched.
+    // Only right fragments get a fresh id — track those so a linked pair cut
+    // in the same pass gets re-paired right-to-right instead of dangling.
+    const rightFragmentId = new Map<string, string>()
+    for (const track of doc.tracks) {
       for (const clip of track.clips) {
-        const end = clipEndTicks(clip)
-        const hit =
-          playheadTicks > clip.timelineStart &&
-          playheadTicks < end &&
-          (selectedClipIds.length === 0 || selectedClipIds.includes(clip.id))
-        if (!hit) {
+        if (willCut(clip)) rightFragmentId.set(clip.id, newId('clip'))
+      }
+    }
+    if (!rightFragmentId.size) {
+      set({ status: 'Nothing to cut at playhead' })
+      return
+    }
+
+    const tracks = doc.tracks.map((track) => {
+      const nextClips: Clip[] = []
+      for (const clip of track.clips) {
+        const rightId = rightFragmentId.get(clip.id)
+        if (!rightId) {
           nextClips.push(clip)
           continue
         }
-        const offset = playheadTicks - clip.timelineStart
-        const mid = clip.in + offset
-        if (mid <= clip.in || mid >= clip.out) {
-          nextClips.push(clip)
-          continue
-        }
-        changed = true
+        const mid = clip.in + (playheadTicks - clip.timelineStart)
+        nextClips.push({ ...clip, out: mid })
         nextClips.push({
-          ...clip,
-          out: mid,
-        })
-        nextClips.push({
-          id: newId('clip'),
+          id: rightId,
           assetId: clip.assetId,
           trackId: clip.trackId,
           timelineStart: playheadTicks,
           in: mid,
           out: clip.out,
+          linkedClipId: clip.linkedClipId ? rightFragmentId.get(clip.linkedClipId) : undefined,
         })
       }
       return { ...track, clips: nextClips }
     })
-    if (!changed) {
-      set({ status: 'Nothing to cut at playhead' })
-      return
-    }
+
     get().pushHistory()
     set({
       doc: normalizeDocument({ ...doc, tracks }),
@@ -229,12 +249,16 @@ export const useDocStore = create<EditorState>((set, get) => ({
     const kill = new Set(selectedClipIds)
     const tracks = doc.tracks.map((t) => ({
       ...t,
-      clips: t.clips.filter((c) => !kill.has(c.id)),
+      clips: t.clips
+        .filter((c) => !kill.has(c.id))
+        // Leave a surviving partner (e.g. Alt+click deleted just the audio
+        // half) pointing at nothing, rather than a dangling clip id.
+        .map((c) => (c.linkedClipId && kill.has(c.linkedClipId) ? { ...c, linkedClipId: undefined } : c)),
     }))
     set({
       doc: normalizeDocument({ ...doc, tracks }),
       selectedClipIds: [],
-      status: 'Deleted clip(s)',
+      status: selectedClipIds.length > 1 ? 'Deleted clips' : 'Deleted clip',
     })
   },
 

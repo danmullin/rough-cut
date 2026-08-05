@@ -6,7 +6,12 @@ import { formatTimecode } from '../store/documentStore'
 export function Inspector() {
   const doc = useDocStore((s) => s.doc)
   const selected = useDocStore((s) => s.selectedClipIds)
-  const hit = selected.length === 1 ? findClip(doc, selected[0]!) : null
+  const hit = selected.length ? findClip(doc, selected[0]!) : null
+  // A plain click selects a clip and its linked partner (e.g. video + its
+  // embedded audio) together — still show details for that pair rather than
+  // falling back to a generic "N selected" message.
+  const isLinkedPair = selected.length === 2 && hit?.clip.linkedClipId === selected[1]
+  const showDetails = hit && (selected.length === 1 || isLinkedPair)
 
   return (
     <aside className="inspector panel">
@@ -15,6 +20,8 @@ export function Inspector() {
       </header>
       {!hit ? (
         <p className="empty-hint">Select a clip to inspect</p>
+      ) : !showDetails ? (
+        <p className="empty-hint">{selected.length} clips selected</p>
       ) : (
         <dl className="inspector-grid">
           <dt>Clip</dt>
@@ -36,6 +43,14 @@ export function Inspector() {
           </dd>
           <dt>Speed</dt>
           <dd className="muted">100% (stub)</dd>
+          {isLinkedPair ? (
+            <>
+              <dt>Linked</dt>
+              <dd className="muted">
+                {hit.track.type === 'video' ? 'Audio follows this clip (Alt+click to select alone)' : 'Attached to its video clip (Alt+click to select alone)'}
+              </dd>
+            </>
+          ) : null}
         </dl>
       )}
       <div className="seq-meta">
