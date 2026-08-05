@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useDocStore } from '../store/documentStore'
 import { clipDurationTicks, clipEndTicks } from '../types'
-import { computeContentEnd, findClip, normalizeDocument } from '../store/document'
+import { computeContentEnd, findClip, normalizeDocument, orderedTracks } from '../store/document'
 import { formatTimecode } from '../store/documentStore'
 
 const TRACK_H = 52
@@ -209,13 +209,15 @@ export function Timeline() {
           if (e.dataTransfer.types.includes('text/rough-cut-asset')) e.preventDefault()
         }}
         onDrop={(e) => {
+          // Fallback for drops that miss every track lane (e.g. the ruler, or
+          // blank space below a short track list) — lands on the default track.
           e.preventDefault()
           const assetId = e.dataTransfer.getData('text/rough-cut-asset')
           if (!assetId) return
           useDocStore.getState().placeAsset(assetId, tickFromClientX(e.clientX))
         }}
         onPointerDown={(e) => {
-          if ((e.target as HTMLElement).closest('.clip, .playhead-grip')) return
+          if ((e.target as HTMLElement).closest('.clip, .playhead-grip, button')) return
           if (tool === 'hand') {
             const el = scrollRef.current
             if (!el) return
@@ -265,12 +267,37 @@ export function Timeline() {
             ))}
           </div>
 
-          {doc.tracks.map((track) => (
+          <div className="track-add-row" style={{ paddingLeft: LABEL_W }}>
+            <button type="button" className="ghost-btn" onClick={() => useDocStore.getState().addTrack('video')}>
+              + Video Track
+            </button>
+          </div>
+
+          {orderedTracks(doc).map((track) => (
             <div key={track.id} className={`track track-${track.type}`} style={{ height: TRACK_H }}>
               <div className="track-label" style={{ width: LABEL_W }}>
-                {track.name}
+                <span>{track.name}</span>
+                <button
+                  type="button"
+                  className="track-remove-btn"
+                  title={`Remove ${track.name}`}
+                  onClick={() => useDocStore.getState().removeTrack(track.id)}
+                >
+                  ×
+                </button>
               </div>
-              <div className="track-lane">
+              <div
+                className="track-lane"
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes('text/rough-cut-asset')) e.preventDefault()
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const assetId = e.dataTransfer.getData('text/rough-cut-asset')
+                  if (!assetId) return
+                  useDocStore.getState().placeAsset(assetId, tickFromClientX(e.clientX), track.id)
+                }}
+              >
                 {track.clips.map((clip) => {
                   const asset = doc.assets.find((a) => a.id === clip.assetId)
                   const w = Math.max(4, clipDurationTicks(clip) * zoom)
@@ -341,6 +368,12 @@ export function Timeline() {
               </div>
             </div>
           ))}
+
+          <div className="track-add-row" style={{ paddingLeft: LABEL_W }}>
+            <button type="button" className="ghost-btn" onClick={() => useDocStore.getState().addTrack('audio')}>
+              + Audio Track
+            </button>
+          </div>
 
           <div
             className="playhead"

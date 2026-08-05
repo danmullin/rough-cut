@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Clip, ProjectDocument, ToolId } from '../types'
+import type { Clip, ProjectDocument, ToolId, TrackType } from '../types'
 import { clipDurationTicks, clipEndTicks, newId } from '../types'
 import {
   computeContentEnd,
@@ -48,12 +48,14 @@ interface EditorState {
   setStatus: (s: string) => void
 
   addAssetAndPlace: (asset: ProjectDocument['assets'][number], place?: boolean) => void
-  placeAsset: (assetId: string, timelineStart?: number) => void
+  placeAsset: (assetId: string, timelineStart?: number, targetTrackId?: string) => void
   razorAtPlayhead: () => void
   deleteSelected: () => void
   moveClip: (clipId: string, newStart: number) => void
   trimClip: (clipId: string, edge: 'in' | 'out', timelineTick: number) => void
   renameProject: (name: string) => void
+  addTrack: (type: TrackType) => void
+  removeTrack: (trackId: string) => void
 }
 
 function clampPlayhead(doc: ProjectDocument, ticks: number): number {
@@ -181,9 +183,9 @@ export const useDocStore = create<EditorState>((set, get) => ({
     })
   },
 
-  placeAsset: (assetId, timelineStart) => {
+  placeAsset: (assetId, timelineStart, targetTrackId) => {
     get().pushHistory()
-    const doc = placeAssetOnTimeline(get().doc, assetId, timelineStart)
+    const doc = placeAssetOnTimeline(get().doc, assetId, timelineStart, targetTrackId)
     set({ doc: normalizeDocument(doc), status: 'Clip placed' })
   },
 
@@ -308,6 +310,66 @@ export const useDocStore = create<EditorState>((set, get) => ({
 
   renameProject: (name) => {
     set({ doc: { ...get().doc, name } })
+  },
+
+  addTrack: (type) => {
+    const { doc } = get()
+    get().pushHistory()
+    // New tracks land at the outer edge of their group — a fresh video track
+    // becomes the new topmost (V-next), a fresh audio track the new bottom
+    // (A-next) — matching where Premiere adds a track by default.
+    const nextIndex = doc.tracks.filter((t) => t.type === type).reduce((m, t) => Math.max(m, t.index), 0) + 1
+    const track = {
+      id: newId(`track_${type[0]}`),
+      name: `${type === 'video' ? 'V' : 'A'}${nextIndex}`,
+      type,
+      index: nextIndex,
+      clips: [],
+    }
+    set({
+      doc: normalizeDocument({ ...doc, tracks: [...doc.tracks, track] }),
+      status: `Added ${track.name}`,
+    })
+  },
+
+  removeTrack: (trackId) => {
+    const { doc } = get()
+    const track = doc.tracks.find((t) => t.id === trackId)
+    if (!track) return
+    const sameType = doc.tracks.filter((t) => t.type === track.type)
+    if (sameType.length <= 1) {
+      set({ status: `Can't remove the last ${track.type} track` })
+      return
+    }
+    if (
+      track.clips.length &&
+      !window.confirm(`Delete ${track.name}? This removes ${track.clips.length} clip(s) on it.`)
+    ) {
+      return
+    }
+    get().pushHistory()
+    const killedClipIds = new Set(track.clips.map((c) => c.id))
+    // Renumber the survivors of this type contiguously (1..N) so deleting a
+    // middle track shifts the rest down, same as Premiere.
+    let counter = 0
+    const tracks = doc.tracks
+      .filter((t) => t.id !== trackId)
+      .map((t) => {
+        if (t.type !== track.type) return t
+        counter += 1
+        return { ...t, index: counter, name: `${track.type === 'video' ? 'V' : 'A'}${counter}` }
+      })
+      .map((t) => ({
+        ...t,
+        clips: t.clips.map((c) =>
+          c.linkedClipId && killedClipIds.has(c.linkedClipId) ? { ...c, linkedClipId: undefined } : c,
+        ),
+      }))
+    set({
+      doc: normalizeDocument({ ...doc, tracks }),
+      selectedClipIds: get().selectedClipIds.filter((id) => !killedClipIds.has(id)),
+      status: `Removed ${track.name}`,
+    })
   },
 }))
 

@@ -1,6 +1,6 @@
 import type { ProjectDocument } from '../types'
 import { ticksToSeconds } from '../types'
-import { clipAtTime } from '../store/document'
+import { topVideoClipAt } from '../store/document'
 import { getVideoElement, seekVideo } from './assetCache'
 
 function drawVideoFrame(
@@ -51,10 +51,9 @@ export async function composeFrame(
   ctx.fillStyle = '#05070c'
   ctx.fillRect(0, 0, width, height)
 
-  const vTrack = doc.tracks.find((t) => t.type === 'video')
-  if (!vTrack) return
-  const clip = clipAtTime(vTrack, ticks)
-  if (!clip) return
+  const hit = topVideoClipAt(doc, ticks)
+  if (!hit) return
+  const { clip } = hit
   const asset = doc.assets.find((a) => a.id === clip.assetId)
   if (!asset || asset.kind !== 'video') return
 
@@ -94,8 +93,8 @@ export async function composeFrameLive(
   ctx.fillStyle = '#05070c'
   ctx.fillRect(0, 0, width, height)
 
-  const vTrack = doc.tracks.find((t) => t.type === 'video')
-  const clip = vTrack ? clipAtTime(vTrack, ticks) : null
+  const hit = topVideoClipAt(doc, ticks)
+  const clip = hit?.clip ?? null
   if (!clip) return { clipId: null, video: null }
   const asset = doc.assets.find((a) => a.id === clip.assetId)
   if (!asset || asset.kind !== 'video') return { clipId: null, video: null }

@@ -42,6 +42,14 @@ export interface Track {
   id: string
   name: string
   type: TrackType
+  /**
+   * 1-based rank within its type. Drives display order the way Premiere
+   * stacks tracks — video ascends upward (higher index = higher on screen,
+   * and wins when more than one video track has a clip at the same time),
+   * audio ascends downward (higher index = further from the video/audio
+   * boundary).
+   */
+  index: number
   clips: Clip[]
 }
 

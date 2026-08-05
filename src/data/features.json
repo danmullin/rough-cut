@@ -18,7 +18,9 @@
       { "name": "Razor at playhead", "shortcut": "Ctrl+K" },
       { "name": "Delete selected clips", "shortcut": "Delete / Backspace" },
       { "name": "Zoom timeline", "shortcut": "Ctrl+= / Ctrl+-" },
-      { "name": "Select clip ignoring link", "shortcut": "Alt+Click", "note": "Grab just the video or just the audio half of a linked clip" }
+      { "name": "Select clip ignoring link", "shortcut": "Alt+Click", "note": "Grab just the video or just the audio half of a linked clip" },
+      { "name": "Add track", "shortcut": "+ Video/Audio Track button", "note": "New sequences start with 3 video + 3 audio tracks, like Premiere. Video tracks stack upward (higher wins when stacked), audio stacks downward" },
+      { "name": "Remove track", "shortcut": "× on track header", "note": "Renumbers remaining tracks of that type; can't remove the last one" }
     ]
   },
   {

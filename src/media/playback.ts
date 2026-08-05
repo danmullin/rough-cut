@@ -1,8 +1,14 @@
 import type { ProjectDocument } from '../types'
 import { ticksToSeconds } from '../types'
-import { clipAtTime, computeContentEnd } from '../store/document'
+import { activeAudioClipsAt, computeContentEnd } from '../store/document'
 import { ensureObjectUrl } from './assetCache'
 import { composeFrame, composeFrameLive } from './compose'
+
+interface TrackAudioState {
+  el: HTMLAudioElement
+  url: string
+  clipId: string | null
+}
 
 export class PlaybackEngine {
   private raf = 0
@@ -11,9 +17,8 @@ export class PlaybackEngine {
   private anchorTicks = 0
   /** Last tick value *this engine* wrote to the store — used to detect external seeks (scrub) mid-playback. */
   private lastSetTicks = -1
-  private audio: HTMLAudioElement | null = null
-  private audioUrl: string | null = null
-  private audioClipId: string | null = null
+  /** One Audio element per audio track that currently has a clip playing — every track mixes together, like Premiere. */
+  private audioByTrack = new Map<string, TrackAudioState>()
   /** Video currently playing natively during a play run (see `paintPlaying`). */
   private playingVideo: HTMLVideoElement | null = null
   private playingClipId: string | null = null
@@ -78,39 +83,44 @@ export class PlaybackEngine {
     this.playingClipId = null
   }
 
+  /**
+   * Syncs one Audio element per audio track that has a clip at `ticks`, all
+   * mixed together (browsers play multiple concurrent Audio elements
+   * simultaneously with no extra work) — matches Premiere, where every
+   * audio track is heard at once rather than only the first one.
+   */
   private async syncAudio(ticks: number): Promise<void> {
     const doc = this.getDoc()
-    const aTrack = doc.tracks.find((t) => t.type === 'audio')
-    const vTrack = doc.tracks.find((t) => t.type === 'video')
-    // Prefer dedicated audio track; else use video clip's audio via HTMLAudioElement from same blob
-    let clip = aTrack ? clipAtTime(aTrack, ticks) : null
-    let asset = clip ? doc.assets.find((a) => a.id === clip!.assetId) : null
-    if (!clip && vTrack) {
-      clip = clipAtTime(vTrack, ticks)
-      asset = clip ? doc.assets.find((a) => a.id === clip!.assetId) : null
+    const active = activeAudioClipsAt(doc, ticks)
+    const activeTrackIds = new Set(active.map(({ track }) => track.id))
+
+    for (const [trackId, state] of this.audioByTrack) {
+      if (!activeTrackIds.has(trackId)) state.el.pause()
     }
-    if (!clip || !asset) {
-      if (this.audio) {
-        this.audio.pause()
-        this.audioClipId = null
+
+    for (const { track, clip } of active) {
+      const asset = doc.assets.find((a) => a.id === clip.assetId)
+      if (!asset) continue
+      const url = await ensureObjectUrl(asset.blobKey)
+      let state = this.audioByTrack.get(track.id)
+      if (!state || state.url !== url) {
+        state?.el.pause()
+        state = { el: new Audio(url), url, clipId: null }
+        this.audioByTrack.set(track.id, state)
       }
-      return
+      const srcSec = ticksToSeconds(clip.in + (ticks - clip.timelineStart), doc.sequence.frameRate)
+      if (state.clipId !== clip.id || Math.abs(state.el.currentTime - srcSec) > 0.25) {
+        state.el.currentTime = srcSec
+        state.clipId = clip.id
+      }
+      if (this.isPlaying() && state.el.paused) {
+        void state.el.play().catch(() => {})
+      }
     }
-    const url = await ensureObjectUrl(asset.blobKey)
-    if (!this.audio || this.audioUrl !== url) {
-      if (this.audio) this.audio.pause()
-      this.audio = new Audio(url)
-      this.audioUrl = url
-      this.audioClipId = null
-    }
-    const srcSec = ticksToSeconds(clip.in + (ticks - clip.timelineStart), doc.sequence.frameRate)
-    if (this.audioClipId !== clip.id || Math.abs(this.audio.currentTime - srcSec) > 0.25) {
-      this.audio.currentTime = srcSec
-      this.audioClipId = clip.id
-    }
-    if (this.isPlaying() && this.audio.paused) {
-      void this.audio.play().catch(() => {})
-    }
+  }
+
+  private pauseAllAudio(): void {
+    for (const state of this.audioByTrack.values()) state.el.pause()
   }
 
   start(): void {
@@ -145,7 +155,7 @@ export class PlaybackEngine {
       if (next >= end) {
         next = end
         this.setPlaying(false)
-        this.audio?.pause()
+        this.pauseAllAudio()
         this.pausePlayingVideo()
         if (next === current) return
         this.lastSetTicks = next
@@ -164,14 +174,14 @@ export class PlaybackEngine {
   }
 
   stopAudio(): void {
-    this.audio?.pause()
+    this.pauseAllAudio()
   }
 
   destroy(): void {
     cancelAnimationFrame(this.raf)
     this.raf = 0
-    this.audio?.pause()
-    this.audio = null
+    this.pauseAllAudio()
+    this.audioByTrack.clear()
     this.pausePlayingVideo()
   }
 }

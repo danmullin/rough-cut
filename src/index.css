@@ -589,8 +589,10 @@ body.is-resizing-horizontal {
 
 .track-label {
   flex: 0 0 auto;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
   background: var(--panel);
   border-right: 1px solid var(--border);
   font-size: 0.75rem;
@@ -599,6 +601,45 @@ body.is-resizing-horizontal {
   position: sticky;
   left: 0;
   z-index: 2;
+}
+
+.track-remove-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.track-label:hover .track-remove-btn {
+  opacity: 0.7;
+}
+
+.track-remove-btn:hover {
+  opacity: 1 !important;
+  background: color-mix(in srgb, var(--danger, #e05252) 25%, transparent);
+  color: var(--danger, #e05252);
+}
+
+.track-add-row {
+  display: flex;
+  padding-block: 0.2rem;
+}
+
+.track-add-row .ghost-btn {
+  font-size: 0.68rem;
+  padding: 0.15rem 0.5rem;
+  opacity: 0.6;
+}
+
+.track-add-row .ghost-btn:hover {
+  opacity: 1;
 }
 
 .track-lane {

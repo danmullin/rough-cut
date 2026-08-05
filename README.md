@@ -56,6 +56,8 @@ Shell patterns borrow from [Penultimate](../vector) (chrome, undo, shortcuts, `f
 - **Delete selected clips** — `Delete / Backspace`
 - **Zoom timeline** — `Ctrl+= / Ctrl+-`
 - **Select clip ignoring link** — `Alt+Click` — Grab just the video or just the audio half of a linked clip
+- **Add track** — `+ Video/Audio Track button` — New sequences start with 3 video + 3 audio tracks, like Premiere. Video tracks stack upward (higher wins when stacked), audio stacks downward
+- **Remove track** — `× on track header` — Renumbers remaining tracks of that type; can't remove the last one
 
 ### Edit
 
